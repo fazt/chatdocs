@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: chatdocs
+      POSTGRES_PASSWORD: chatdocs
+      POSTGRES_DB: chatdocs
+    ports:
+      - "5432:5432"

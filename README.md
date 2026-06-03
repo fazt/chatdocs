@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ChatDocs
+
+Upload Markdown files and ask questions about their content using AI. Built with Next.js, Drizzle ORM, SQLite, and OpenAI.
+
+## How it works
+
+1. **Upload** a `.md` file — the content is split into chunks and converted to embeddings via OpenAI
+2. **Ask** a question about the document — the question is embedded and matched against document chunks using cosine similarity
+3. **Get** an AI answer grounded in the relevant document sections with source citations
+
+## Tech Stack
+
+- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4, Zustand
+- **Backend**: Next.js API routes (serverless)
+- **Database**: SQLite via Drizzle ORM (zero-setup, local-first)
+- **AI**: OpenAI API (embeddings + chat completions)
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Set up environment variables
+
+Copy `.env.local` and fill in your OpenAI-compatible API key:
+
+```env
+OPENAI_API_KEY=sk-your-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+### 3. Initialize the database
+
+```bash
+npx drizzle-kit push
+```
+
+### 4. Run the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and upload a `.md` file to get started.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/
+│   ├── api/
+│   │   ├── chat/[conversationId]   # Streaming RAG chat
+│   │   ├── conversations/          # CRUD conversations
+│   │   └── documents/              # CRUD documents
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   ├── chat/                       # Chat UI components
+│   ├── documents/                  # File upload + document list
+│   └── ui/                         # Primitive UI components
+├── db/
+│   ├── index.ts                    # Drizzle client
+│   └── schema.ts                   # Tables: documents, chunks, conversations, messages, conversation_documents
+├── lib/
+│   ├── chat.ts                     # System prompt builder + streaming
+│   ├── chunker.ts                  # Markdown chunking with overlap
+│   ├── constants.ts
+│   ├── embeddings.ts               # OpenAI embedding calls
+│   ├── openai.ts                   # OpenAI client
+│   ├── utils.ts                    # cn(), uuid(), now()
+│   └── vector.ts                   # Cosine similarity + top-K
+├── stores/
+│   ├── chat-store.ts               # Zustand state for conversations
+│   └── documents-store.ts          # Zustand state for documents
+└── types/
+    └── index.ts
+```
 
-## Learn More
+## API Routes
 
-To learn more about Next.js, take a look at the following resources:
+| Route | Method | Description |
+|---|---|---|
+| `/api/documents` | POST | Upload + chunk + embed a markdown file |
+| `/api/documents` | GET | List all documents |
+| `/api/documents/[id]` | DELETE | Remove a document and its chunks |
+| `/api/conversations` | GET | List all conversations |
+| `/api/conversations` | POST | Create a new conversation |
+| `/api/conversations/[id]` | GET | Get conversation with messages and linked docs |
+| `/api/conversations/[id]` | DELETE | Delete a conversation |
+| `/api/chat/[conversationId]` | POST | Ask a question (streaming SSE response) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Drag-and-drop markdown file upload
+- Hierarchical text chunking with configurable overlap
+- Semantic search via cosine similarity
+- Streaming AI responses with typewriter effect
+- Conversation history with auto-title from first message
+- Source citations (document name + section heading)
+- Abort in-progress generation
+- Dark theme
+- Responsive layout (mobile sidebar drawer)

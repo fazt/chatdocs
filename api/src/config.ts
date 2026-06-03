@@ -1,0 +1,22 @@
+export const config = {
+  port: parseInt(process.env.PORT || "3001", 10),
+  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  databaseUrl: process.env.DATABASE_URL || "postgres://chatdocs:chatdocs@localhost:5432/chatdocs",
+  jwtSecret: process.env.JWT_SECRET || "chatdocs-dev-secret-change-in-production",
+  jwtExpiresIn: "7d",
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  openaiBaseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+  openaiModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
+  openaiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
+  appUrl: process.env.APP_URL || "http://localhost:3000",
+  resendApiKey: process.env.RESEND_API_KEY || "",
+  resendFrom: process.env.RESEND_FROM || "noreply@chatdocs.app",
+  spaces: {
+    endpoint: process.env.SPACES_ENDPOINT || "https://nyc3.digitaloceanspaces.com",
+    region: process.env.SPACES_REGION || "nyc3",
+    bucket: process.env.SPACES_BUCKET || "chatdocs",
+    accessKeyId: process.env.SPACES_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.SPACES_SECRET_ACCESS_KEY || "",
+    publicUrl: process.env.SPACES_PUBLIC_URL || "",
+  },
+} as const;
