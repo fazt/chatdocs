@@ -1,30 +1,19 @@
 import { Router } from "express";
 import { db, schema } from "../db/index.js";
 import { hashPassword, verifyPassword, signToken, setAuthCookie, removeAuthCookie } from "../lib/auth.js";
-import { uuid, now } from "../lib/utils.js";
+import { uuid, now, first } from "../lib/utils.js";
 import { optionalAuth } from "../middleware/auth.middleware.js";
 import { sendWelcomeEmail } from "../lib/email.js";
 import { eq } from "drizzle-orm";
-
-function first<T>(rows: T[]): T | undefined {
-  return rows[0];
-}
+import { validate } from "../middleware/validate.js";
+import { registerSchema, loginSchema } from "../schemas/auth.schema.js";
+import type { z } from "zod";
 
 const router = Router();
 
-router.post("/register", async (req, res) => {
+router.post("/register", validate(registerSchema), async (req, res) => {
   try {
-    const { email, password, name } = req.body;
-
-    if (!email || !password) {
-      res.status(400).json({ error: "Email and password are required" });
-      return;
-    }
-
-    if (password.length < 6) {
-      res.status(400).json({ error: "Password must be at least 6 characters" });
-      return;
-    }
+    const { email, password, name } = req.body as z.infer<typeof registerSchema>;
 
     const existing = first(
       await db
@@ -67,14 +56,9 @@ router.post("/register", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", validate(loginSchema), async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      res.status(400).json({ error: "Email and password are required" });
-      return;
-    }
+    const { email, password } = req.body as z.infer<typeof loginSchema>;
 
     const user = first(
       await db

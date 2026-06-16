@@ -24,7 +24,7 @@ export default function AuthPage() {
       } else {
         success = await register(email, password, name || undefined);
       }
-      if (success) router.push("/");
+      if (success) router.push("/dashboard");
     },
     [mode, email, password, name, login, register, router]
   );

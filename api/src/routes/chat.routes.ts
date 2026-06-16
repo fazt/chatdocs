@@ -1,28 +1,27 @@
 import { Router } from "express";
 import { db, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
-import { uuid, now } from "../lib/utils.js";
+import { uuid, now, first } from "../lib/utils.js";
 import { embedText } from "../lib/embeddings.js";
 import { topK } from "../lib/vector.js";
 import { buildSystemPrompt, streamChatCompletion, buildSources } from "../lib/chat.js";
 import { TOP_K_CHUNKS } from "../lib/constants.js";
 import { eq, and, inArray } from "drizzle-orm";
-
-function first<T>(rows: T[]): T | undefined {
-  return rows[0];
-}
+import { validate } from "../middleware/validate.js";
+import { conversationIdParamSchema, chatMessageSchema } from "../schemas/chat.schema.js";
+import type { z } from "zod";
 
 const router = Router();
 
-router.post("/:conversationId", requireAuth, async (req, res) => {
-  try {
-    const { conversationId } = req.params;
-    const { message } = req.body;
-
-    if (!message || typeof message !== "string" || !message.trim()) {
-      res.status(400).json({ error: "Message is required" });
-      return;
-    }
+router.post(
+  "/:conversationId",
+  requireAuth,
+  validate(conversationIdParamSchema, "params"),
+  validate(chatMessageSchema),
+  async (req, res) => {
+    try {
+      const { conversationId } = req.params as z.infer<typeof conversationIdParamSchema>;
+      const { message } = req.body as z.infer<typeof chatMessageSchema>;
 
     const conversation = first(
       await db

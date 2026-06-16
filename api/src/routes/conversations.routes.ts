@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { db, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
-import { uuid, now } from "../lib/utils.js";
+import { uuid, now, first } from "../lib/utils.js";
 import { eq, and, desc, sql } from "drizzle-orm";
-
-function first<T>(rows: T[]): T | undefined {
-  return rows[0];
-}
+import { validate } from "../middleware/validate.js";
+import { conversationIdParamSchema, createConversationSchema } from "../schemas/conversations.schema.js";
+import type { z } from "zod";
 
 const router = Router();
 
@@ -45,9 +44,9 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, validate(createConversationSchema), async (req, res) => {
   try {
-    const body = req.body || {};
+    const body = req.body as z.infer<typeof createConversationSchema>;
     const timestamp = now();
     const id = uuid();
 
@@ -59,7 +58,7 @@ router.post("/", requireAuth, async (req, res) => {
       updatedAt: timestamp,
     });
 
-    if (body.documentIds?.length > 0) {
+    if (body.documentIds && body.documentIds.length > 0) {
       const userDocIds = new Set<string>();
       for (const docId of body.documentIds) {
         const doc = first(
@@ -100,9 +99,9 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/:id", requireAuth, validate(conversationIdParamSchema, "params"), async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as z.infer<typeof conversationIdParamSchema>;
 
     const conversation = first(
       await db
@@ -151,9 +150,9 @@ router.get("/:id", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:id", requireAuth, validate(conversationIdParamSchema, "params"), async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as z.infer<typeof conversationIdParamSchema>;
 
     const conversation = first(
       await db

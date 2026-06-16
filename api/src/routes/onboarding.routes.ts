@@ -2,10 +2,10 @@ import { Router } from "express";
 import { db, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { eq } from "drizzle-orm";
-
-function first<T>(rows: T[]): T | undefined {
-  return rows[0];
-}
+import { first } from "../lib/utils.js";
+import { validate } from "../middleware/validate.js";
+import { updateOnboardingSchema } from "../schemas/onboarding.schema.js";
+import type { z } from "zod";
 
 const router = Router();
 
@@ -30,9 +30,9 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/", requireAuth, async (req, res) => {
+router.patch("/", requireAuth, validate(updateOnboardingSchema), async (req, res) => {
   try {
-    const data = req.body;
+    const data = req.body as z.infer<typeof updateOnboardingSchema>;
 
     const user = first(
       await db

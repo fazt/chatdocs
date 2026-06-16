@@ -1,9 +1,15 @@
 import { Resend } from "resend";
 import { config } from "../config.js";
 
-const resend = new Resend(config.resendApiKey);
+function getResend() {
+  if (!config.resendApiKey) return null;
+  return new Resend(config.resendApiKey);
+}
 
 export async function sendWelcomeEmail(email: string, name: string) {
+  const resend = getResend();
+  if (!resend) return;
+
   const appUrl = config.appUrl;
 
   await resend.emails.send({
@@ -22,6 +28,9 @@ export async function sendWelcomeEmail(email: string, name: string) {
 }
 
 export async function sendResetPasswordEmail(email: string, token: string) {
+  const resend = getResend();
+  if (!resend) return;
+
   const resetUrl = `${config.appUrl}/reset-password?token=${token}`;
 
   await resend.emails.send({

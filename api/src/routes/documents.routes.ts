@@ -6,14 +6,10 @@ import { chunkMarkdown } from "../lib/chunker.js";
 import { embedText, embedTexts } from "../lib/embeddings.js";
 import { describeImage } from "../lib/vision.js";
 import { uploadFile } from "../lib/storage.js";
-import { uuid, now } from "../lib/utils.js";
+import { uuid, now, first } from "../lib/utils.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { MAX_FILE_SIZE, MAX_IMAGE_SIZE, ALLOWED_EXTENSIONS, IMAGE_EXTENSIONS } from "../lib/constants.js";
 import { eq } from "drizzle-orm";
-
-function first<T>(rows: T[]): T | undefined {
-  return rows[0];
-}
 
 const router = Router();
 

@@ -1,107 +1,69 @@
-# ChatDocs
+# chatdocs
 
-Upload Markdown files and ask questions about their content using AI. Built with Next.js, Drizzle ORM, SQLite, and OpenAI.
+> **Prototipo** — Aplicación full-stack para chatear con tus documentos mediante RAG. Frontend en Next.js 16 y un backend independiente en Express + PostgreSQL.
 
-## How it works
+## ¿Qué hace?
 
-1. **Upload** a `.md` file — the content is split into chunks and converted to embeddings via OpenAI
-2. **Ask** a question about the document — the question is embedded and matched against document chunks using cosine similarity
-3. **Get** an AI answer grounded in the relevant document sections with source citations
+Subes documentos (Markdown e imágenes), el sistema los divide en fragmentos y genera embeddings con OpenAI. Luego puedes chatear con ellos: la pregunta se vectoriza, se recuperan los fragmentos más relevantes por similitud coseno y el modelo responde citando las fuentes. Incluye autenticación, conversaciones persistentes y facturación con Stripe.
 
-## Tech Stack
+## Características
 
-- **Frontend**: Next.js 16 (App Router), React 19, Tailwind CSS v4, Zustand
-- **Backend**: Next.js API routes (serverless)
-- **Database**: SQLite via Drizzle ORM (zero-setup, local-first)
-- **AI**: OpenAI API (embeddings + chat completions)
+- 🔐 Autenticación con JWT + bcrypt (registro / login, cookies HTTP-only).
+- 📤 Subida drag-and-drop de documentos Markdown e imágenes (almacenados en S3 / DigitalOcean Spaces vía multer).
+- ✂️ Chunking automático con solapamiento configurable.
+- 🧠 Embeddings con OpenAI y búsqueda semántica por similitud coseno (top-K).
+- 💬 Chat RAG con respuestas en streaming y citas de fuentes (documento + encabezado).
+- 🗂️ Historial de conversaciones con título autogenerado y contexto multi-documento.
+- 💳 Facturación por suscripción con **Stripe** (planes Pro / Enterprise).
+- 📧 Emails (Resend) y rutas de administración.
 
-## Getting Started
+## Stack
 
-### 1. Install dependencies
+**Frontend (`src/` — Next.js)**
+- Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4.
+- Estado con **Zustand** (auth, chat, documents) · Lucide · Sonner · Stripe.js.
 
+**Backend (`api/` — Express)**
+- Express 4 + Node.js (TypeScript; `tsx` en dev, compilado a `dist/`).
+- **PostgreSQL** (`pg`) vía **Drizzle ORM** (migraciones con drizzle-kit).
+- OpenAI (chat + embeddings) · JWT + bcryptjs · subida con multer → S3 (`@aws-sdk/client-s3`) · Resend · CORS · cookie-parser · Zod.
+- Tests con Jest + Supertest (`tests/unit`, `tests/e2e`).
+
+## Cómo ejecutarlo
+
+**Frontend**
 ```bash
 npm install
+npm run dev            # http://localhost:3000
+npm run build && npm start
+npm run db:push        # migraciones Drizzle (drizzle-kit)
 ```
 
-### 2. Set up environment variables
-
-Copy `.env.local` and fill in your OpenAI-compatible API key:
-
-```env
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-```
-
-### 3. Initialize the database
-
+**Backend (`api/`)**
 ```bash
-npx drizzle-kit push
+cd api
+pnpm install           # (el backend usa pnpm)
+pnpm dev               # http://localhost:3001 (tsx watch)
+pnpm build && pnpm start
+pnpm db:push           # migraciones a PostgreSQL
+pnpm test              # Jest + Supertest
 ```
 
-### 4. Run the dev server
+> El backend incluye `docker-compose.yml` para levantar PostgreSQL localmente.
 
-```bash
-npm run dev
-```
+### Variables de entorno
 
-Open [http://localhost:3000](http://localhost:3000) and upload a `.md` file to get started.
+- **Frontend:** `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL`, `JWT_SECRET`, `DATABASE_URL`, `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PRO_PRICE_ID`, `NEXT_PUBLIC_STRIPE_ENTERPRISE_PRICE_ID`.
+- **Backend (`api/.env`):** `DATABASE_URL`, `CORS_ORIGIN`, `PORT`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_EMBEDDING_MODEL`, `JWT_SECRET`, `APP_URL`, `RESEND_API_KEY`, `RESEND_FROM`, `SPACES_*` (endpoint, region, bucket, keys, public URL).
 
-## Project Structure
+Ver `.env.local.example`.
 
-```
-src/
-├── app/
-│   ├── api/
-│   │   ├── chat/[conversationId]   # Streaming RAG chat
-│   │   ├── conversations/          # CRUD conversations
-│   │   └── documents/              # CRUD documents
-│   ├── layout.tsx
-│   └── page.tsx
-├── components/
-│   ├── chat/                       # Chat UI components
-│   ├── documents/                  # File upload + document list
-│   └── ui/                         # Primitive UI components
-├── db/
-│   ├── index.ts                    # Drizzle client
-│   └── schema.ts                   # Tables: documents, chunks, conversations, messages, conversation_documents
-├── lib/
-│   ├── chat.ts                     # System prompt builder + streaming
-│   ├── chunker.ts                  # Markdown chunking with overlap
-│   ├── constants.ts
-│   ├── embeddings.ts               # OpenAI embedding calls
-│   ├── openai.ts                   # OpenAI client
-│   ├── utils.ts                    # cn(), uuid(), now()
-│   └── vector.ts                   # Cosine similarity + top-K
-├── stores/
-│   ├── chat-store.ts               # Zustand state for conversations
-│   └── documents-store.ts          # Zustand state for documents
-└── types/
-    └── index.ts
-```
+## Arquitectura
 
-## API Routes
+- **Split frontend/backend:** el frontend (Next.js) maneja la UI y el checkout de Stripe; el backend (`api/`, puerto 3001, CORS) concentra la lógica de negocio: auth, documentos, chat y conversaciones.
+- **Pipeline de documentos:** subida → almacenamiento en S3/Spaces → chunking → embeddings OpenAI → consulta por similitud coseno (top-K) → contexto + pregunta al modelo en streaming.
+- **Esquema Drizzle (PostgreSQL):** `users`, `documents`, `chunks` (con embedding y encabezado), `conversations`, `messages` (con fuentes) y la tabla puente `conversation_documents` para contexto multi-documento.
 
-| Route | Method | Description |
-|---|---|---|
-| `/api/documents` | POST | Upload + chunk + embed a markdown file |
-| `/api/documents` | GET | List all documents |
-| `/api/documents/[id]` | DELETE | Remove a document and its chunks |
-| `/api/conversations` | GET | List all conversations |
-| `/api/conversations` | POST | Create a new conversation |
-| `/api/conversations/[id]` | GET | Get conversation with messages and linked docs |
-| `/api/conversations/[id]` | DELETE | Delete a conversation |
-| `/api/chat/[conversationId]` | POST | Ask a question (streaming SSE response) |
+---
 
-## Features
-
-- Drag-and-drop markdown file upload
-- Hierarchical text chunking with configurable overlap
-- Semantic search via cosine similarity
-- Streaming AI responses with typewriter effect
-- Conversation history with auto-title from first message
-- Source citations (document name + section heading)
-- Abort in-progress generation
-- Dark theme
-- Responsive layout (mobile sidebar drawer)
+🧪 Proyecto en estado de **prototipo**.

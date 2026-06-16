@@ -5,15 +5,21 @@ export function middleware(req: NextRequest) {
   const token = req.cookies.get("chatdocs_token")?.value;
   const { pathname } = req.nextUrl;
 
-  // Allow auth pages without token
+  // Public routes that don't require authentication
+  const publicRoutes = ["/", "/pricing"];
+  if (publicRoutes.includes(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Allow auth pages without token, but redirect authenticated users to dashboard
   if (pathname.startsWith("/auth")) {
-    if (token && pathname === "/auth") {
-      return NextResponse.redirect(new URL("/", req.url));
+    if (token) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();
   }
 
-  // Protect main app pages
+  // Protect dashboard and other app pages
   if (!token) {
     return NextResponse.redirect(new URL("/auth", req.url));
   }
