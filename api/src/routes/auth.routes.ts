@@ -1,125 +1,99 @@
-import { Router } from "express";
+import { Hono } from "hono";
+import { setCookie, deleteCookie } from "hono/cookie";
 import { db, schema } from "../db/index.js";
-import { hashPassword, verifyPassword, signToken, setAuthCookie, removeAuthCookie } from "../lib/auth.js";
+import { hashPassword, verifyPassword, signToken, setAuthCookie, removeAuthCookie, TOKEN_COOKIE } from "../lib/auth.js";
 import { uuid, now, first } from "../lib/utils.js";
-import { optionalAuth } from "../middleware/auth.middleware.js";
+import { optionalAuth, type AuthEnv } from "../middleware/auth.middleware.js";
 import { sendWelcomeEmail } from "../lib/email.js";
 import { eq } from "drizzle-orm";
 import { validate } from "../middleware/validate.js";
 import { registerSchema, loginSchema } from "../schemas/auth.schema.js";
-import type { z } from "zod";
 
-const router = Router();
+const routes = new Hono<AuthEnv>();
 
-router.post("/register", validate(registerSchema), async (req, res) => {
-  try {
-    const { email, password, name } = req.body as z.infer<typeof registerSchema>;
+routes.post("/register", validate(registerSchema), async (c) => {
+  const { email, password, name } = c.req.valid("json");
 
-    const existing = first(
-      await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.email, email))
-    );
+  const existing = first(
+    await db.select().from(schema.users).where(eq(schema.users.email, email))
+  );
 
-    if (existing) {
-      res.status(409).json({ error: "Email already registered" });
-      return;
-    }
-
-    const id = uuid();
-    const hashedPassword = await hashPassword(password);
-    const role = "user";
-
-    await db.insert(schema.users).values({
-      id,
-      email,
-      hashedPassword,
-      name: name || email.split("@")[0],
-      role,
-      createdAt: now(),
-    });
-
-    const token = signToken({ userId: id, email, role });
-    setAuthCookie(res, token);
-
-    sendWelcomeEmail(email, name || email.split("@")[0]).catch((err) =>
-      console.error("[Welcome Email Error]", err)
-    );
-
-    res.status(201).json({
-      user: { id, email, role, name: name || email.split("@")[0] },
-    });
-  } catch (error) {
-    console.error("[Register Error]", error);
-    res.status(500).json({ error: "Failed to register" });
+  if (existing) {
+    return c.json({ error: "Email already registered" }, 409);
   }
+
+  const id = uuid();
+  const hashedPassword = await hashPassword(password);
+  const role = "user";
+  const displayName = name || email.split("@")[0];
+
+  await db.insert(schema.users).values({
+    id,
+    email,
+    hashedPassword,
+    name: displayName,
+    role,
+    createdAt: now(),
+  });
+
+  const token = signToken({ userId: id, email, role });
+  c.header("Set-Cookie", setAuthCookie(token));
+
+  sendWelcomeEmail(email, displayName).catch((err) =>
+    console.error("[Welcome Email Error]", err)
+  );
+
+  return c.json({ user: { id, email, role, name: displayName } }, 201);
 });
 
-router.post("/login", validate(loginSchema), async (req, res) => {
-  try {
-    const { email, password } = req.body as z.infer<typeof loginSchema>;
+routes.post("/login", validate(loginSchema), async (c) => {
+  const { email, password } = c.req.valid("json");
 
-    const user = first(
-      await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.email, email))
-    );
+  const user = first(
+    await db.select().from(schema.users).where(eq(schema.users.email, email))
+  );
 
-    if (!user) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
-    }
-
-    const valid = await verifyPassword(password, user.hashedPassword);
-    if (!valid) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
-    }
-
-    const token = signToken({ userId: user.id, email: user.email, role: user.role });
-    setAuthCookie(res, token);
-
-    res.json({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    });
-  } catch (error) {
-    console.error("[Login Error]", error);
-    res.status(500).json({ error: "Failed to login" });
+  if (!user) {
+    return c.json({ error: "Invalid email or password" }, 401);
   }
-});
 
-router.post("/logout", (_req, res) => {
-  removeAuthCookie(res);
-  res.json({ success: true });
-});
-
-router.get("/me", optionalAuth, async (req, res) => {
-  try {
-    if (!req.user) {
-      res.json({ user: null });
-      return;
-    }
-
-    const user = first(
-      await db
-        .select({ id: schema.users.id, email: schema.users.email, name: schema.users.name })
-        .from(schema.users)
-        .where(eq(schema.users.id, req.user.userId))
-    );
-
-    if (!user) {
-      removeAuthCookie(res);
-      res.json({ user: null });
-      return;
-    }
-
-    res.json({ user });
-  } catch (error) {
-    console.error("[Me Error]", error);
-    res.json({ user: null });
+  const valid = await verifyPassword(password, user.hashedPassword);
+  if (!valid) {
+    return c.json({ error: "Invalid email or password" }, 401);
   }
+
+  const token = signToken({ userId: user.id, email: user.email, role: user.role });
+  c.header("Set-Cookie", setAuthCookie(token));
+
+  return c.json({
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+  });
 });
 
-export default router;
+routes.post("/logout", (c) => {
+  deleteCookie(c, TOKEN_COOKIE, { path: "/" });
+  return c.json({ success: true });
+});
+
+routes.get("/me", optionalAuth, async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ user: null });
+  }
+
+  const found = first(
+    await db
+      .select({ id: schema.users.id, email: schema.users.email, name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.userId))
+  );
+
+  if (!found) {
+    deleteCookie(c, TOKEN_COOKIE, { path: "/" });
+    return c.json({ user: null });
+  }
+
+  return c.json({ user: found });
+});
+
+export default routes;

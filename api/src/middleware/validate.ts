@@ -1,20 +1,23 @@
-import type { Request, Response, NextFunction } from "express";
-import type { ZodSchema, ZodError } from "zod";
+import { zValidator } from "@hono/zod-validator";
+import type { ZodSchema } from "zod";
+import type { Context } from "hono";
 
-export function validate(schema: ZodSchema, source: "body" | "params" | "query" = "body") {
-  return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      schema.parse(req[source]);
-      next();
-    } catch (error) {
-      const zodError = error as ZodError;
-      res.status(400).json({
-        error: "Validation failed",
-        details: zodError.issues.map((issue) => ({
-          path: issue.path.join("."),
-          message: issue.message,
-        })),
-      });
+type Source = "json" | "param" | "query";
+
+export function validate<T extends ZodSchema>(schema: T, source: Source = "json") {
+  return zValidator(source, schema, (result, c: Context) => {
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Validation failed",
+          details: result.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        400
+      );
     }
-  };
+    return undefined;
+  });
 }

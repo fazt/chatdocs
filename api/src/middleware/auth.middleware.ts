@@ -1,41 +1,40 @@
-import type { Request, Response, NextFunction } from "express";
-import { verifyToken } from "../lib/auth.js";
+import { createMiddleware } from "hono/factory";
+import { getCookie } from "hono/cookie";
+import { verifyToken, type AuthPayload } from "../lib/auth.js";
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: { userId: string; email: string; role: string };
-    }
-  }
-}
+export const TOKEN_COOKIE = "chatdocs_token";
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.cookies?.chatdocs_token;
+export type AuthEnv = {
+  Variables: {
+    user?: AuthPayload;
+  };
+};
+
+export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
+  const token = getCookie(c, TOKEN_COOKIE);
   if (!token) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+    return c.json({ error: "Unauthorized" }, 401);
   }
   const payload = verifyToken(token);
   if (!payload) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+    return c.json({ error: "Unauthorized" }, 401);
   }
-  req.user = payload;
-  next();
-}
+  c.set("user", payload);
+  await next();
+});
 
-export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
-  const token = req.cookies?.chatdocs_token;
+export const optionalAuth = createMiddleware<AuthEnv>(async (c, next) => {
+  const token = getCookie(c, TOKEN_COOKIE);
   if (token) {
-    req.user = verifyToken(token) ?? undefined;
+    c.set("user", verifyToken(token) ?? undefined);
   }
-  next();
-}
+  await next();
+});
 
-export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.user || req.user.role !== "admin") {
-    res.status(403).json({ error: "Forbidden: admin access required" });
-    return;
+export const requireAdmin = createMiddleware<AuthEnv>(async (c, next) => {
+  const user = c.get("user");
+  if (!user || user.role !== "admin") {
+    return c.json({ error: "Forbidden: admin access required" }, 403);
   }
-  next();
-}
+  await next();
+});

@@ -1,20 +1,30 @@
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
-import type { Request, Response, NextFunction } from "express";
+import { Hono } from "hono";
 
 jest.unstable_mockModule("../../src/lib/auth.js", () => ({
   verifyToken: jest.fn(),
+  hashPassword: jest.fn(),
+  signToken: jest.fn(),
+  setAuthCookie: jest.fn(),
+  removeAuthCookie: jest.fn(),
+  TOKEN_COOKIE: "chatdocs_token",
 }));
 
+let mockVerifyToken: jest.Mock;
 let requireAuth: typeof import("../../src/middleware/auth.middleware.js")["requireAuth"];
 let optionalAuth: typeof import("../../src/middleware/auth.middleware.js")["optionalAuth"];
 let requireAdmin: typeof import("../../src/middleware/auth.middleware.js")["requireAdmin"];
-let mockVerifyToken: jest.Mock;
 
 beforeEach(async () => {
   jest.resetModules();
 
   jest.unstable_mockModule("../../src/lib/auth.js", () => ({
     verifyToken: jest.fn(),
+    hashPassword: jest.fn(),
+    signToken: jest.fn(),
+    setAuthCookie: jest.fn(),
+    removeAuthCookie: jest.fn(),
+    TOKEN_COOKIE: "chatdocs_token",
   }));
 
   const mod = await import("../../src/middleware/auth.middleware.js");
@@ -25,117 +35,109 @@ beforeEach(async () => {
   mockVerifyToken = (authMod as any).verifyToken;
 });
 
-function createReq(cookies?: string): Partial<Request> {
-  return { cookies: cookies ? { chatdocs_token: cookies } : undefined } as Partial<Request>;
+function buildApp(useMiddleware: any) {
+  const app = new Hono();
+  app.get("/protected", useMiddleware, (c) =>
+    c.json({ user: c.get("user" as any) ?? null })
+  );
+  return app;
 }
 
-function createRes(): Partial<Response> {
-  const res: Partial<Response> = {};
-  res.status = jest.fn().mockReturnValue(res) as unknown as Response["status"];
-  res.json = jest.fn().mockReturnValue(res) as unknown as Response["json"];
-  return res;
+async function callApp(
+  app: Hono,
+  cookies?: string
+): Promise<{ status: number; body: any }> {
+  const headers: Record<string, string> = {};
+  if (cookies) headers["Cookie"] = cookies;
+  const res = await app.request("/protected", { headers });
+  return { status: res.status, body: await res.json() };
 }
 
 describe("requireAuth", () => {
-  it("should return 401 if no token cookie", () => {
-    const req = createReq();
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    requireAuth(req as Request, res as Response, next);
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: "Unauthorized" });
-    expect(next).not.toHaveBeenCalled();
+  it("should return 401 if no token cookie", async () => {
+    const app = buildApp(requireAuth);
+    const { status, body } = await callApp(app);
+    expect(status).toBe(401);
+    expect(body.error).toBe("Unauthorized");
   });
 
-  it("should return 401 if token is invalid", () => {
+  it("should return 401 if token is invalid", async () => {
     mockVerifyToken.mockReturnValue(null);
-
-    const req = createReq("invalid-token");
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    requireAuth(req as Request, res as Response, next);
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: "Unauthorized" });
-    expect(next).not.toHaveBeenCalled();
+    const app = buildApp(requireAuth);
+    const { status, body } = await callApp(app, "chatdocs_token=invalid-token");
+    expect(status).toBe(401);
+    expect(body.error).toBe("Unauthorized");
   });
 
-  it("should set req.user and call next if token is valid", () => {
+  it("should set user and call next if token is valid", async () => {
     const payload = { userId: "user-1", email: "test@example.com", role: "user" as const };
     mockVerifyToken.mockReturnValue(payload);
-
-    const req = createReq("valid-token");
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    requireAuth(req as Request, res as Response, next);
-
-    expect((req as any).user).toEqual(payload);
-    expect(next).toHaveBeenCalled();
+    const app = buildApp(requireAuth);
+    const { status, body } = await callApp(app, "chatdocs_token=valid-token");
+    expect(status).toBe(200);
+    expect(body.user).toEqual(payload);
   });
 });
 
 describe("optionalAuth", () => {
-  it("should call next without user if no token", () => {
-    const req = createReq();
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    optionalAuth(req as Request, res as Response, next);
-
-    expect((req as any).user).toBeUndefined();
-    expect(next).toHaveBeenCalled();
+  it("should call next without user if no token", async () => {
+    const app = buildApp(optionalAuth);
+    const { status, body } = await callApp(app);
+    expect(status).toBe(200);
+    expect(body.user).toBeNull();
   });
 
-  it("should set user and call next if token is valid", () => {
+  it("should set user and call next if token is valid", async () => {
     const payload = { userId: "user-1", email: "test@example.com", role: "user" as const };
     mockVerifyToken.mockReturnValue(payload);
-
-    const req = createReq("valid-token");
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    optionalAuth(req as Request, res as Response, next);
-
-    expect((req as any).user).toEqual(payload);
-    expect(next).toHaveBeenCalled();
+    const app = buildApp(optionalAuth);
+    const { status, body } = await callApp(app, "chatdocs_token=valid-token");
+    expect(status).toBe(200);
+    expect(body.user).toEqual(payload);
   });
 });
 
 describe("requireAdmin", () => {
-  it("should return 403 if user is not admin", () => {
-    const req = { user: { userId: "1", email: "test@example.com", role: "user" } };
-    const res = createRes();
-    const next: NextFunction = jest.fn();
+  function buildAdminApp(middleware: any, seedUser?: any) {
+    const app = new Hono<{ Variables: { user?: any } }>();
+    if (seedUser !== undefined) {
+      app.use("*", async (c, next) => {
+        if (seedUser) c.set("user", seedUser);
+        await next();
+      });
+    }
+    app.get("/admin", middleware, (c) => c.json({ ok: true }));
+    return app;
+  }
 
-    requireAdmin(req as unknown as Request, res as Response, next);
+  async function callAdmin(middleware: any, seedUser?: any) {
+    const app = buildAdminApp(middleware, seedUser);
+    const res = await app.request("/admin");
+    return { status: res.status, body: await res.json() };
+  }
 
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: "Forbidden: admin access required" });
-    expect(next).not.toHaveBeenCalled();
+  it("should return 403 if user is not admin", async () => {
+    const { status, body } = await callAdmin(requireAdmin, {
+      userId: "1",
+      email: "test@example.com",
+      role: "user",
+    });
+    expect(status).toBe(403);
+    expect(body.error).toBe("Forbidden: admin access required");
   });
 
-  it("should return 403 if no user", () => {
-    const req = {} as Partial<Request>;
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    requireAdmin(req as Request, res as Response, next);
-
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(next).not.toHaveBeenCalled();
+  it("should return 403 if no user (no token)", async () => {
+    const { status } = await callAdmin(requireAdmin, null);
+    expect(status).toBe(403);
   });
 
-  it("should call next if user is admin", () => {
-    const req = { user: { userId: "1", email: "admin@example.com", role: "admin" } };
-    const res = createRes();
-    const next: NextFunction = jest.fn();
-
-    requireAdmin(req as unknown as Request, res as Response, next);
-
-    expect(next).toHaveBeenCalled();
+  it("should call next if user is admin", async () => {
+    const { status, body } = await callAdmin(requireAdmin, {
+      userId: "1",
+      email: "admin@example.com",
+      role: "admin",
+    });
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
   });
 });

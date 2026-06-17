@@ -1,15 +1,20 @@
-import { Router } from "express";
+import { Hono } from "hono";
 import { db, schema } from "../db/index.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import { requireAuth, type AuthEnv } from "../middleware/auth.middleware.js";
 import { uuid, now, first } from "../lib/utils.js";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { validate } from "../middleware/validate.js";
-import { conversationIdParamSchema, createConversationSchema } from "../schemas/conversations.schema.js";
-import type { z } from "zod";
+import {
+  conversationIdParamSchema,
+  createConversationSchema,
+} from "../schemas/conversations.schema.js";
 
-const router = Router();
+const routes = new Hono<AuthEnv>();
 
-router.get("/", requireAuth, async (req, res) => {
+routes.use("*", requireAuth);
+
+routes.get("/", async (c) => {
+  const user = c.get("user")!;
   try {
     const conversations = await db
       .select({
@@ -25,7 +30,7 @@ router.get("/", requireAuth, async (req, res) => {
           ),
       })
       .from(schema.conversations)
-      .where(eq(schema.conversations.userId, req.user!.userId))
+      .where(eq(schema.conversations.userId, user.userId))
       .leftJoin(
         schema.messages,
         eq(schema.messages.conversationId, schema.conversations.id)
@@ -37,22 +42,24 @@ router.get("/", requireAuth, async (req, res) => {
       .groupBy(schema.conversations.id)
       .orderBy(desc(schema.conversations.updatedAt));
 
-    res.json({ conversations });
+    return c.json({ conversations });
   } catch (error) {
     console.error("[List Conversations Error]", error);
-    res.status(500).json({ error: "Failed to list conversations" });
+    return c.json({ error: "Failed to list conversations" }, 500);
   }
 });
 
-router.post("/", requireAuth, validate(createConversationSchema), async (req, res) => {
+routes.post("/", validate(createConversationSchema), async (c) => {
+  const user = c.get("user")!;
+  const body = c.req.valid("json");
+
   try {
-    const body = req.body as z.infer<typeof createConversationSchema>;
     const timestamp = now();
     const id = uuid();
 
     await db.insert(schema.conversations).values({
       id,
-      userId: req.user!.userId,
+      userId: user.userId,
       title: body.title || "New Chat",
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -68,7 +75,7 @@ router.post("/", requireAuth, validate(createConversationSchema), async (req, re
             .where(
               and(
                 eq(schema.documents.id, docId),
-                eq(schema.documents.userId, req.user!.userId)
+                eq(schema.documents.userId, user.userId)
               )
             )
         );
@@ -77,7 +84,7 @@ router.post("/", requireAuth, validate(createConversationSchema), async (req, re
 
       if (userDocIds.size > 0) {
         await db.insert(schema.conversationDocuments).values(
-          Array.from(userDocIds).map((docId: string) => ({
+          Array.from(userDocIds).map((docId) => ({
             conversationId: id,
             documentId: docId,
           }))
@@ -86,38 +93,30 @@ router.post("/", requireAuth, validate(createConversationSchema), async (req, re
     }
 
     const conversation = first(
-      await db
-        .select()
-        .from(schema.conversations)
-        .where(eq(schema.conversations.id, id))
+      await db.select().from(schema.conversations).where(eq(schema.conversations.id, id))
     );
 
-    res.status(201).json({ conversation });
+    return c.json({ conversation }, 201);
   } catch (error) {
     console.error("[Create Conversation Error]", error);
-    res.status(500).json({ error: "Failed to create conversation" });
+    return c.json({ error: "Failed to create conversation" }, 500);
   }
 });
 
-router.get("/:id", requireAuth, validate(conversationIdParamSchema, "params"), async (req, res) => {
-  try {
-    const { id } = req.params as z.infer<typeof conversationIdParamSchema>;
+routes.get("/:id", validate(conversationIdParamSchema, "param"), async (c) => {
+  const user = c.get("user")!;
+  const { id } = c.req.valid("param");
 
+  try {
     const conversation = first(
-      await db
-        .select()
-        .from(schema.conversations)
-        .where(eq(schema.conversations.id, id))
+      await db.select().from(schema.conversations).where(eq(schema.conversations.id, id))
     );
 
     if (!conversation) {
-      res.status(404).json({ error: "Conversation not found" });
-      return;
+      return c.json({ error: "Conversation not found" }, 404);
     }
-
-    if (conversation.userId !== req.user!.userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
+    if (conversation.userId !== user.userId) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
     const msgs = await db
@@ -139,47 +138,35 @@ router.get("/:id", requireAuth, validate(conversationIdParamSchema, "params"), a
       )
       .where(eq(schema.conversationDocuments.conversationId, id));
 
-    res.json({
-      conversation,
-      messages: msgs,
-      documents: linkedDocs,
-    });
+    return c.json({ conversation, messages: msgs, documents: linkedDocs });
   } catch (error) {
     console.error("[Get Conversation Error]", error);
-    res.status(500).json({ error: "Failed to get conversation" });
+    return c.json({ error: "Failed to get conversation" }, 500);
   }
 });
 
-router.delete("/:id", requireAuth, validate(conversationIdParamSchema, "params"), async (req, res) => {
-  try {
-    const { id } = req.params as z.infer<typeof conversationIdParamSchema>;
+routes.delete("/:id", validate(conversationIdParamSchema, "param"), async (c) => {
+  const user = c.get("user")!;
+  const { id } = c.req.valid("param");
 
+  try {
     const conversation = first(
-      await db
-        .select()
-        .from(schema.conversations)
-        .where(eq(schema.conversations.id, id))
+      await db.select().from(schema.conversations).where(eq(schema.conversations.id, id))
     );
 
     if (!conversation) {
-      res.status(404).json({ error: "Conversation not found" });
-      return;
+      return c.json({ error: "Conversation not found" }, 404);
+    }
+    if (conversation.userId !== user.userId) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
-    if (conversation.userId !== req.user!.userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-
-    await db
-      .delete(schema.conversations)
-      .where(eq(schema.conversations.id, id));
-
-    res.json({ success: true });
+    await db.delete(schema.conversations).where(eq(schema.conversations.id, id));
+    return c.json({ success: true });
   } catch (error) {
     console.error("[Delete Conversation Error]", error);
-    res.status(500).json({ error: "Failed to delete conversation" });
+    return c.json({ error: "Failed to delete conversation" }, 500);
   }
 });
 
-export default router;
+export default routes;

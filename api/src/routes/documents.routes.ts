@@ -1,88 +1,91 @@
-import { Router } from "express";
-import multer from "multer";
+import { Hono } from "hono";
 import path from "path";
 import { db, schema } from "../db/index.js";
 import { chunkMarkdown } from "../lib/chunker.js";
-import { embedText, embedTexts } from "../lib/embeddings.js";
+import { embedTexts } from "../lib/embeddings.js";
 import { describeImage } from "../lib/vision.js";
 import { uploadFile } from "../lib/storage.js";
 import { uuid, now, first } from "../lib/utils.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
-import { MAX_FILE_SIZE, MAX_IMAGE_SIZE, ALLOWED_EXTENSIONS, IMAGE_EXTENSIONS } from "../lib/constants.js";
+import { requireAuth, type AuthEnv } from "../middleware/auth.middleware.js";
+import {
+  MAX_FILE_SIZE,
+  MAX_IMAGE_SIZE,
+  ALLOWED_EXTENSIONS,
+  IMAGE_EXTENSIONS,
+} from "../lib/constants.js";
 import { eq } from "drizzle-orm";
 
-const router = Router();
+const routes = new Hono<AuthEnv>();
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: Math.max(MAX_FILE_SIZE, MAX_IMAGE_SIZE) },
-});
+routes.use("*", requireAuth);
 
 function isImage(ext: string): boolean {
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
-router.get("/", requireAuth, async (req, res) => {
+routes.get("/", async (c) => {
+  const user = c.get("user")!;
   try {
     const docs = await db
       .select()
       .from(schema.documents)
-      .where(eq(schema.documents.userId, req.user!.userId))
+      .where(eq(schema.documents.userId, user.userId))
       .orderBy(schema.documents.createdAt);
-
-    res.json({ documents: docs });
+    return c.json({ documents: docs });
   } catch (error) {
     console.error("[List Documents Error]", error);
-    res.status(500).json({ error: "Failed to list documents" });
+    return c.json({ error: "Failed to list documents" }, 500);
   }
 });
 
-router.post("/", requireAuth, upload.single("file"), async (req, res) => {
+routes.post("/", async (c) => {
+  const user = c.get("user")!;
   try {
-    const file = req.file;
-    if (!file) {
-      res.status(400).json({ error: "No file provided" });
-      return;
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return c.json({ error: "No file provided" }, 400);
     }
 
-    const ext = path.extname(file.originalname).toLowerCase();
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const originalname = file.name;
+    const mimetype = file.type || "application/octet-stream";
+    const ext = path.extname(originalname).toLowerCase();
     const image = isImage(ext);
 
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      res.status(400).json({
-        error: `Invalid file type. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}`,
-      });
-      return;
+      return c.json(
+        { error: `Invalid file type. Allowed: ${ALLOWED_EXTENSIONS.join(", ")}` },
+        400
+      );
     }
 
     const maxSize = image ? MAX_IMAGE_SIZE : MAX_FILE_SIZE;
-    if (file.size > maxSize) {
-      res.status(400).json({
-        error: `File too large. Maximum size is ${maxSize / 1024 / 1024}MB`,
-      });
-      return;
+    if (buffer.length > maxSize) {
+      return c.json(
+        { error: `File too large. Maximum size is ${maxSize / 1024 / 1024}MB` },
+        400
+      );
     }
 
     const timestamp = now();
     const docId = uuid();
 
-    // Upload original file to Spaces
     const extClean = ext.startsWith(".") ? ext : `.${ext}`;
     const key = `documents/${docId}${extClean}`;
-    const url = await uploadFile(key, file.buffer, file.mimetype || "application/octet-stream");
+    const url = await uploadFile(key, buffer, mimetype);
 
     if (image) {
-      // ——— Image upload ———
-      const description = await describeImage(file.buffer, file.mimetype || "image/png");
+      const description = await describeImage(buffer, mimetype);
       const [embedding] = await embedTexts([description]);
 
       await db.insert(schema.documents).values({
         id: docId,
-        userId: req.user!.userId,
-        filename: file.originalname,
-        originalName: file.originalname,
-        mimeType: file.mimetype || "image/png",
-        size: file.size,
+        userId: user.userId,
+        filename: originalname,
+        originalName: originalname,
+        mimeType: mimetype,
+        size: buffer.length,
         type: "image",
         url,
         chunkCount: 1,
@@ -101,98 +104,97 @@ router.post("/", requireAuth, upload.single("file"), async (req, res) => {
         createdAt: timestamp,
       });
 
-      res.status(201).json({
-        id: docId,
-        filename: file.originalname,
-        size: file.size,
-        type: "image",
-        url,
-        chunkCount: 1,
-        description,
-      });
-    } else {
-      // ——— Markdown upload ———
-      const content = file.buffer.toString("utf-8");
-      if (!content.trim()) {
-        res.status(400).json({ error: "File is empty" });
-        return;
-      }
-
-      const rawChunks = chunkMarkdown(content);
-      const embeddings = await embedTexts(rawChunks.map((c) => c.content));
-
-      await db.insert(schema.documents).values({
-        id: docId,
-        userId: req.user!.userId,
-        filename: file.originalname,
-        originalName: file.originalname,
-        mimeType: file.mimetype || "text/markdown",
-        size: file.size,
-        type: "markdown",
-        url,
-        chunkCount: rawChunks.length,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
-
-      if (rawChunks.length > 0) {
-        await db.insert(schema.chunks).values(
-          rawChunks.map((chunk, i) => ({
-            id: chunk.id,
-            documentId: docId,
-            content: chunk.content,
-            embedding: JSON.stringify(embeddings[i]),
-            heading: chunk.heading,
-            chunkIndex: chunk.chunkIndex,
-            tokenCount: chunk.tokenCount,
-            createdAt: timestamp,
-          }))
-        );
-      }
-
-      res.status(201).json({
-        id: docId,
-        filename: file.originalname,
-        size: file.size,
-        type: "markdown",
-        url,
-        chunkCount: rawChunks.length,
-      });
+      return c.json(
+        {
+          id: docId,
+          filename: originalname,
+          size: buffer.length,
+          type: "image",
+          url,
+          chunkCount: 1,
+          description,
+        },
+        201
+      );
     }
+
+    const content = buffer.toString("utf-8");
+    if (!content.trim()) {
+      return c.json({ error: "File is empty" }, 400);
+    }
+
+    const rawChunks = chunkMarkdown(content);
+    const embeddings = await embedTexts(rawChunks.map((ch) => ch.content));
+
+    await db.insert(schema.documents).values({
+      id: docId,
+      userId: user.userId,
+      filename: originalname,
+      originalName: originalname,
+      mimeType: mimetype,
+      size: buffer.length,
+      type: "markdown",
+      url,
+      chunkCount: rawChunks.length,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    if (rawChunks.length > 0) {
+      await db.insert(schema.chunks).values(
+        rawChunks.map((chunk, i) => ({
+          id: chunk.id,
+          documentId: docId,
+          content: chunk.content,
+          embedding: JSON.stringify(embeddings[i]),
+          heading: chunk.heading,
+          chunkIndex: chunk.chunkIndex,
+          tokenCount: chunk.tokenCount,
+          createdAt: timestamp,
+        }))
+      );
+    }
+
+    return c.json(
+      {
+        id: docId,
+        filename: originalname,
+        size: buffer.length,
+        type: "markdown",
+        url,
+        chunkCount: rawChunks.length,
+      },
+      201
+    );
   } catch (error) {
     console.error("[Upload Error]", error);
     const message = error instanceof Error ? error.message : "Failed to upload document";
-    res.status(500).json({ error: message });
+    return c.json({ error: message }, 500);
   }
 });
 
-router.delete("/:id", requireAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
+routes.delete("/:id", async (c) => {
+  const user = c.get("user")!;
+  const id = c.req.param("id");
 
+  try {
     const doc = first(
-      await db
-        .select()
-        .from(schema.documents)
-        .where(eq(schema.documents.id, id))
+      await db.select().from(schema.documents).where(eq(schema.documents.id, id))
     );
 
     if (!doc) {
-      res.status(404).json({ error: "Document not found" });
-      return;
+      return c.json({ error: "Document not found" }, 404);
     }
-
-    if (doc.userId !== req.user!.userId) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
+    if (doc.userId !== user.userId) {
+      return c.json({ error: "Forbidden" }, 403);
     }
 
     await db.delete(schema.documents).where(eq(schema.documents.id, id));
-    res.json({ success: true });
+    return c.json({ success: true });
   } catch (error) {
     console.error("[Delete Document Error]", error);
-    res.status(500).json({ error: "Failed to delete document" });
+    return c.json({ error: "Failed to delete document" }, 500);
   }
 });
 
-export default router;
+export default routes;

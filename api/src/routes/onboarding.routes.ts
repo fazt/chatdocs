@@ -1,64 +1,65 @@
-import { Router } from "express";
+import { Hono } from "hono";
 import { db, schema } from "../db/index.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import { requireAuth, type AuthEnv } from "../middleware/auth.middleware.js";
 import { eq } from "drizzle-orm";
 import { first } from "../lib/utils.js";
 import { validate } from "../middleware/validate.js";
 import { updateOnboardingSchema } from "../schemas/onboarding.schema.js";
-import type { z } from "zod";
 
-const router = Router();
+const routes = new Hono<AuthEnv>();
 
-router.get("/", requireAuth, async (req, res) => {
+routes.use("*", requireAuth);
+
+routes.get("/", async (c) => {
+  const user = c.get("user")!;
   try {
-    const user = first(
+    const found = first(
       await db
         .select({ onboarding: schema.users.onboarding })
         .from(schema.users)
-        .where(eq(schema.users.id, req.user!.userId))
+        .where(eq(schema.users.id, user.userId))
     );
 
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+    if (!found) {
+      return c.json({ error: "User not found" }, 404);
     }
 
-    res.json({ onboarding: JSON.parse(user.onboarding) });
+    return c.json({ onboarding: JSON.parse(found.onboarding) });
   } catch (error) {
     console.error("[Get Onboarding Error]", error);
-    res.status(500).json({ error: "Failed to get onboarding" });
+    return c.json({ error: "Failed to get onboarding" }, 500);
   }
 });
 
-router.patch("/", requireAuth, validate(updateOnboardingSchema), async (req, res) => {
-  try {
-    const data = req.body as z.infer<typeof updateOnboardingSchema>;
+routes.patch("/", validate(updateOnboardingSchema), async (c) => {
+  const user = c.get("user")!;
+  const data = c.req.valid("json");
 
-    const user = first(
+  try {
+    const found = first(
       await db
         .select({ onboarding: schema.users.onboarding })
         .from(schema.users)
-        .where(eq(schema.users.id, req.user!.userId))
+        .where(eq(schema.users.id, user.userId))
     );
 
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+    if (!found) {
+      return c.json({ error: "User not found" }, 404);
     }
 
-    const current = JSON.parse(user.onboarding);
+    const current = JSON.parse(found.onboarding);
     const merged = { ...current, ...data };
 
     await db
       .update(schema.users)
       .set({ onboarding: JSON.stringify(merged) })
-      .where(eq(schema.users.id, req.user!.userId));
+      .where(eq(schema.users.id, user.userId));
 
-    res.json({ onboarding: merged });
+    return c.json({ onboarding: merged });
   } catch (error) {
     console.error("[Update Onboarding Error]", error);
-    res.status(500).json({ error: "Failed to update onboarding" });
+    return c.json({ error: "Failed to update onboarding" }, 500);
   }
 });
 
-export default router;
+export default routes;

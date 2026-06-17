@@ -1,23 +1,36 @@
-import express from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import routes from "./routes/index.js";
 import { config } from "./config.js";
+import type { AuthEnv } from "./middleware/auth.middleware.js";
 
-const app = express();
+const app = new Hono<AuthEnv>();
 
-app.use(cors({
-  origin: config.corsOrigin,
-  credentials: true,
-}));
-app.use(express.json());
-app.use(cookieParser());
+app.use("*", logger());
 
-app.use("/api", routes);
+app.use(
+  "*",
+  cors({
+    origin: config.corsOrigin,
+    credentials: true,
+  })
+);
 
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.get("/api/health", (c) =>
+  c.json({ status: "ok", service: "chatdocs-api", timestamp: new Date().toISOString() })
+);
+
+app.route("/api", routes);
+
+app.onError((err, c) => {
   console.error("[API Error]", err);
-  res.status(500).json({ error: err.message || "Internal server error" });
+  return c.json(
+    { error: err instanceof Error ? err.message : "Internal server error" },
+    500
+  );
 });
+
+app.notFound((c) => c.json({ error: "Not found" }, 404));
 
 export default app;
