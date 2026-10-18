@@ -1,84 +1,32 @@
 "use client";
 
 import { create } from "zustand";
-import { api } from "@/lib/client";
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  role?: string;
-}
+import { api } from "@/lib/api";
+import type { User, WorkspaceSummary } from "@/types";
 
 interface AuthState {
   user: User | null;
-  loading: boolean;
-  error: string | null;
-  checkAuth: () => Promise<void>;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (email: string, password: string, name?: string) => Promise<boolean>;
+  workspaces: WorkspaceSummary[];
+  loaded: boolean;
+  /** Carga la sesión desde la API (la cookie es httpOnly: JS nunca ve el token). */
+  refresh: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuth = create<AuthState>((set) => ({
   user: null,
-  loading: false,
-  error: null,
-
-  checkAuth: async () => {
+  workspaces: [],
+  loaded: false,
+  refresh: async () => {
     try {
-      const res = await api("/auth/me");
-      const data = await res.json();
-      set({ user: data.user, loading: false });
+      const data = await api<{ user: User | null; workspaces: WorkspaceSummary[] }>("/auth/me");
+      set({ user: data.user, workspaces: data.workspaces, loaded: true });
     } catch {
-      set({ user: null, loading: false });
+      set({ user: null, workspaces: [], loaded: true });
     }
   },
-
-  login: async (email: string, password: string) => {
-    set({ error: null, loading: true });
-    try {
-      const res = await api("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        set({ error: data.error, loading: false });
-        return false;
-      }
-      set({ user: data.user, loading: false });
-      return true;
-    } catch {
-      set({ error: "Network error", loading: false });
-      return false;
-    }
-  },
-
-  register: async (email: string, password: string, name?: string) => {
-    set({ error: null, loading: true });
-    try {
-      const res = await api("/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        set({ error: data.error, loading: false });
-        return false;
-      }
-      set({ user: data.user, loading: false });
-      return true;
-    } catch {
-      set({ error: "Network error", loading: false });
-      return false;
-    }
-  },
-
   logout: async () => {
-    await api("/auth/logout", { method: "POST" });
-    set({ user: null });
+    await api("/auth/logout", { method: "POST" }).catch(() => undefined);
+    set({ user: null, workspaces: [] });
   },
 }));

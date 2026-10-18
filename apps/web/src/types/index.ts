@@ -1,59 +1,134 @@
-export interface ChunkResult {
+export type MemberRole = "owner" | "editor" | "viewer";
+export type PlanId = "free" | "pro" | "team";
+export type DocumentKind = "pdf" | "docx" | "markdown" | "text";
+
+export interface User {
   id: string;
-  content: string;
-  heading: string;
-  chunkIndex: number;
-  tokenCount: number;
-  documentId: string;
+  email: string;
+  name: string;
+  role: "user" | "admin";
 }
 
-export interface ScoredChunk extends ChunkResult {
-  score: number;
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  plan: PlanId;
+  role: MemberRole;
 }
 
-export interface SourceInfo {
+export interface PlanInfo {
+  id: PlanId;
+  name: string;
+  description: string;
+  priceCents: number;
+  currency: string;
+  days: number;
+  limits: { members: number; documents: number; pagesPerMonth: number; questionsPerMonth: number; extractionsPerMonth: number };
+  features: string[];
+}
+
+export interface Usage {
+  period: string;
+  plan: PlanId;
+  limits: PlanInfo["limits"];
+  used: { questions: number; pages: number; extractions: number; documents: number; members: number };
+}
+
+export interface WorkspaceDetail {
+  workspace: { id: string; name: string; plan: PlanId; planExpiresAt: string | null; role: MemberRole };
+  usage: Usage;
+  planInfo: PlanInfo;
+}
+
+export interface Collection {
+  id: string;
+  name: string;
+  description: string;
+  kind: "legal" | "compliance" | "research" | "general";
+  documentCount: number;
+  createdAt: string;
+}
+
+export interface DocumentMetadata {
+  authors?: string;
+  year?: string;
+  doi?: string;
+  reference?: string;
+  parties?: string;
+  signedAt?: string;
+  notes?: string;
+}
+
+export interface DocumentItem {
+  id: string;
+  collectionId: string;
+  title: string;
+  originalName: string;
+  kind: DocumentKind;
+  sizeBytes: number;
+  status: "queued" | "processing" | "ready" | "failed";
+  error: string | null;
+  pageCount: number;
+  chunkCount: number;
+  metadata: DocumentMetadata;
+  createdAt: string;
+  updatedAt: string;
+  collectionName?: string | null;
+}
+
+export interface CitationQuote {
+  text: string;
+  verified: boolean;
+  page: number | null;
+}
+
+export interface Citation {
+  n: number;
   chunkId: string;
-  documentName: string;
-  heading: string;
+  documentId: string;
+  documentTitle: string;
+  documentKind: DocumentKind;
+  page: number;
+  heading: string | null;
+  excerpt: string;
   score: number;
+  used: boolean;
+  quotes: CitationQuote[];
 }
 
 export interface Message {
   id: string;
-  conversationId: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant";
   content: string;
-  sources?: SourceInfo[];
-  tokenCount: number;
+  citations: Citation[];
+  status: "complete" | "aborted" | "error";
   createdAt: string;
 }
 
 export interface Conversation {
   id: string;
   title: string;
-  createdAt: string;
+  mode: "qa" | "compare";
+  collectionId: string | null;
   updatedAt: string;
-  messageCount?: number;
-  documentCount?: number;
+  createdAt: string;
 }
 
-export interface Document {
-  id: string;
-  filename: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  type?: "markdown" | "image";
-  url?: string;
-  chunkCount: number;
-  createdAt: string;
-  updatedAt: string;
+export interface ConversationDetail {
+  conversation: Conversation;
+  messages: Message[];
+  documents: { id: string; title: string; kind: DocumentKind; status: string }[];
 }
 
-export interface StreamEvent {
-  type: "delta" | "done" | "error";
-  content?: string;
-  sources?: SourceInfo[];
-  messageId?: string;
-  message?: string;
+export interface ExtractionField {
+  key: string;
+  label: string;
+  instructions: string;
+}
+
+export interface ExtractionTemplate {
+  key: string;
+  name: string;
+  description: string;
+  fields: ExtractionField[];
 }

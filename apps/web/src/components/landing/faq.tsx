@@ -1,102 +1,50 @@
-"use client";
-
-import { useState } from "react";
-import { Plus } from "lucide-react";
 import { Reveal } from "./reveal";
-import { cn } from "@/lib/utils";
 
 const faqs = [
   {
-    q: "What file types are supported?",
-    a: "Markdown (.md / .mdx) today. The chunker is heading-aware, so H1–H3 become searchable anchors in citations. PDF and code are on the roadmap.",
+    q: "¿Qué significa que una cita esté «verificada»?",
+    a: "Que la frase que el modelo puso entre comillas aparece literalmente (ignorando mayúsculas, tildes y saltos de línea) en la página del documento que cita. Si el modelo parafrasea o se equivoca, la cita aparece como no verificada y lo ves antes de usarla.",
   },
   {
-    q: "Where is my data stored?",
-    a: "A single SQLite file on your machine. Documents, chunks, and embeddings never leave your network unless you explicitly point the model at a remote provider.",
+    q: "¿Sirve con PDF escaneados?",
+    a: "Folio lee el texto del PDF. Si es una imagen escaneada sin capa de texto, te avisará: pásalo antes por OCR (la mayoría de escáneres y Adobe Acrobat lo hacen).",
   },
   {
-    q: "Can I use a different model provider?",
-    a: "Yes. Anything OpenAI-compatible works — OpenAI, Groq, Together, OpenRouter, or a local Ollama endpoint. Configure it via OPENAI_BASE_URL and OPENAI_MODEL.",
+    q: "¿Mis documentos son privados?",
+    a: "Sí. Los originales se guardan sin acceso público y solo los descarga una persona miembro del espacio con sesión iniciada. Cada descarga y exportación queda en la bitácora.",
   },
   {
-    q: "How are answers grounded?",
-    a: "We embed your question, take the top-k chunks by cosine similarity, and pass them as context to the model with a strict system prompt. Citations are clickable links back to the source file and section.",
+    q: "¿Qué modelo de IA usa?",
+    a: "Claude (Anthropic) u OpenAI si configuras sus claves, o cualquier modelo compatible con la API de OpenAI (por ejemplo, uno local con Ollama). Sin claves funciona en modo demo con respuestas extractivas.",
   },
   {
-    q: "Is this open source?",
-    a: "Yes, MIT licensed. Self-host it on a $5 VPS, a Raspberry Pi, or your laptop. Stripe is only used if you opt into the managed Pro tier.",
+    q: "¿Reemplaza la revisión de un abogado?",
+    a: "No. Folio acelera la lectura y te lleva a la fuente, pero las respuestas son de apoyo: siempre revisa la cláusula completa antes de decidir.",
+  },
+  {
+    q: "¿Cómo pago?",
+    a: "Con tarjeta (Stripe), PayPal o Mercado Pago. Cada pago activa el plan por 30 días, sin renovación automática.",
   },
 ];
 
 export function Faq() {
-  const [open, setOpen] = useState<number | null>(0);
-
   return (
-    <section className="border-t border-border/60 py-24 lg:py-32">
-      <div className="mx-auto max-w-4xl px-6">
+    <section className="border-t border-border/60 py-20 lg:py-28">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <Reveal>
-          <div className="mb-12 text-center">
-            <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.25em] text-cream-soft/80">
-              ↳ questions
-            </p>
-            <h2 className="text-balance text-4xl font-medium leading-[1.05] tracking-[-0.02em] sm:text-5xl">
-              The fine print,{" "}
-              <span className="font-serif-italic text-cream">briefly</span>.
-            </h2>
-          </div>
+          <h2 className="mb-10 text-balance text-4xl font-medium tracking-[-0.02em]">Preguntas frecuentes</h2>
         </Reveal>
-
-        <Reveal>
-          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/40">
-            {faqs.map((item, i) => {
-              const isOpen = open === i;
-              return (
-                <div
-                  key={item.q}
-                  className={cn(
-                    "border-b border-border/80 last:border-b-0",
-                    isOpen && "bg-ink/40"
-                  )}
-                >
-                  <button
-                    onClick={() => setOpen(isOpen ? null : i)}
-                    className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-secondary/30 sm:px-8"
-                    aria-expanded={isOpen}
-                  >
-                    <span className="flex items-center gap-4">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span className="text-base font-medium text-foreground sm:text-lg">
-                        {item.q}
-                      </span>
-                    </span>
-                    <Plus
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300",
-                        isOpen && "rotate-45 text-cream"
-                      )}
-                    />
-                  </button>
-                  <div
-                    className={cn(
-                      "grid overflow-hidden transition-all duration-300 ease-out",
-                      isOpen
-                        ? "grid-rows-[1fr] opacity-100"
-                        : "grid-rows-[0fr] opacity-0"
-                    )}
-                  >
-                    <div className="min-h-0 overflow-hidden">
-                      <p className="px-6 pb-6 pl-[4.25rem] text-pretty text-sm leading-relaxed text-muted-foreground sm:px-8">
-                        {item.a}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Reveal>
+        <div className="divide-y divide-border/70 rounded-2xl border border-border/80">
+          {faqs.map((item) => (
+            <details key={item.q} className="group px-6 py-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
+                {item.q}
+                <span aria-hidden className="font-mono text-muted-foreground transition-transform group-open:rotate-45">+</span>
+              </summary>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{item.a}</p>
+            </details>
+          ))}
+        </div>
       </div>
     </section>
   );

@@ -9,67 +9,54 @@ export function Hero() {
       <div aria-hidden className="absolute inset-0 -z-10 bg-grid opacity-60" />
       <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-[640px] bg-radial-fade" />
 
-      <div className="mx-auto grid max-w-7xl gap-12 px-6 pb-24 pt-20 lg:grid-cols-12 lg:gap-10 lg:pb-32 lg:pt-28">
+      <div className="mx-auto grid max-w-7xl gap-12 px-4 pb-20 pt-16 sm:px-6 lg:grid-cols-12 lg:gap-10 lg:pb-32 lg:pt-28">
         <div className="lg:col-span-7">
-          <Reveal delay={0}>
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/80 bg-secondary/40 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+          <Reveal>
+            <div className="mb-6 inline-flex flex-wrap items-center gap-2 rounded-full border border-border/80 bg-secondary/40 px-3 py-1 font-mono text-[11px] text-muted-foreground">
               <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-mint" />
-              v0.2 · now streaming answers
-              <span className="text-border">·</span>
-              <span className="text-foreground">MIT</span>
+              para equipos legales, de cumplimiento e investigación
             </div>
           </Reveal>
 
           <Reveal delay={80}>
-            <h1 className="text-balance font-sans text-5xl font-medium leading-[1.02] tracking-[-0.03em] sm:text-6xl lg:text-[88px]">
-              Your{" "}
-              <span className="font-serif-italic text-cream">markdown</span>,
-              <br />
-              now <span className="font-serif-italic text-cream">answerable</span>.
+            <h1 className="text-balance text-[2.6rem] font-medium leading-[1.04] tracking-[-0.03em] sm:text-6xl lg:text-[80px]">
+              Cada respuesta, con su <span className="font-serif-italic text-cream">cita exacta</span> y su{" "}
+              <span className="font-serif-italic text-cream">página</span>.
             </h1>
           </Reveal>
 
           <Reveal delay={200}>
             <p className="mt-7 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              ChatDocs turns your <code className="rounded bg-secondary/60 px-1.5 py-0.5 font-mono text-[0.9em] text-foreground/90">.md</code> files
-              into a tiny, citation-backed search engine. Drop a doc, ask a
-              question, get an answer that quotes the lines it came from.
+              Sube contratos, políticas, normas o papers y pregunta en lenguaje natural. Folio responde citando el texto literal, verifica
+              que la cita exista en el documento y te lleva a la página para que lo compruebes en un clic.
             </p>
           </Reveal>
 
           <Reveal delay={320}>
             <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link href="/auth">
-                <Button size="lg" className="group h-11 px-5 text-[15px]">
-                  Open the app
-                  <span className="ml-1.5 text-cream-soft transition-transform group-hover:translate-x-0.5">
-                    →
-                  </span>
+              <Link href="/registro">
+                <Button size="lg" className="h-11 px-5 text-[15px]">
+                  Probar gratis
+                  <span className="ml-1.5 text-cream-soft">→</span>
                 </Button>
               </Link>
-              <Link href="#how">
+              <Link href="/#como-funciona">
                 <Button size="lg" variant="outline" className="h-11 px-5 text-[15px]">
-                  See how it works
+                  Ver cómo funciona
                 </Button>
               </Link>
             </div>
           </Reveal>
 
           <Reveal delay={440}>
-            <div className="mt-10 flex items-center gap-6 font-mono text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="h-1 w-1 rounded-full bg-mint" />
-                self-hosted
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-1 w-1 rounded-full bg-mint" />
-                local-first SQLite
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-1 w-1 rounded-full bg-mint" />
-                no data leaves your machine
-              </span>
-            </div>
+            <ul className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[11px] text-muted-foreground">
+              {["PDF, Word, Markdown y TXT", "citas verificadas", "compara documentos", "exporta con fuentes"].map((t) => (
+                <li key={t} className="flex items-center gap-1.5">
+                  <span className="h-1 w-1 rounded-full bg-mint" />
+                  {t}
+                </li>
+              ))}
+            </ul>
           </Reveal>
         </div>
 

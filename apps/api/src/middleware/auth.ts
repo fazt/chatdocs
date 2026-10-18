@@ -72,6 +72,9 @@ export const loadUser = createMiddleware<AppEnv>(async (c, next) => {
   if (token) {
     const user = await loadSession(token);
     if (user) c.set("user", user);
+    // Cookie caducada o revocada: se borra para que la web no crea que hay sesión
+    // (evita el bucle /app → /login → /app del proxy de Next).
+    else clearSessionCookie(c);
   }
   await next();
 });
