@@ -1,48 +1,30 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# dependencias
 node_modules/
-/.pnp
+.pnp
 .pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-api/dist/
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
+# builds
+/apps/web/.next/
+/apps/web/out/
+/apps/api/dist/
 *.tsbuildinfo
 next-env.d.ts
 
-# database
-/data/
-*.db
-*.db-wal
-*.db-shm
+# tests
+/coverage
+/apps/api/.test-uploads/
+
+# archivos subidos en local (ruta exacta: no ocultar carpetas de código)
+/apps/api/uploads/
+
+# env (las plantillas .env.example sí se versionan)
+.env
+.env.*
+!.env.example
+!.env.prod.example
+
+# varios
+.DS_Store
+*.pem
+npm-debug.log*
+.pnpm-debug.log*

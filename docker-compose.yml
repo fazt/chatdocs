@@ -1,0 +1,29 @@
+# Desarrollo: solo la base de datos (PostgreSQL 17 + pgvector).
+#   docker compose up -d
+# La API (127.0.0.1:4095) y la web (127.0.0.1:5264) corren en local con `pnpm dev`.
+name: folio-dev
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: folio-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: folio
+      POSTGRES_PASSWORD: folio
+      POSTGRES_DB: folio
+    # 5524 en el host: puerto único de este proyecto en la máquina de desarrollo.
+    ports:
+      - "127.0.0.1:${DB_PORT:-5524}:5432"
+    volumes:
+      - folio-dev-data:/var/lib/postgresql/data
+      # Crea también la base de test (folio_test) la primera vez.
+      - ./deploy/db/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U folio -d folio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  folio-dev-data:
